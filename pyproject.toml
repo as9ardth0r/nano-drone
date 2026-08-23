@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanodrone-sim"
+version = "0.1.0"
+description = "Simulation de la logique d'évitement de collision pour nano-drone"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+]
+
+[tool.setuptools.packages.find]
+where = ["sim"]
+
+[tool.pytest.ini_options]
+pythonpath = ["sim"]
+testpaths = ["tests"]
