@@ -1,7 +1,6 @@
 /**
- * tof_array.h — réseau de télémètres ToF VL53L1X (avant/haut/gauche/droite
- * dans cette configuration — voir docs/hardware.md pour le choix retenu
- * sur 4 capteurs plutôt que 5, contrainte de broches GPIO disponibles).
+ * tof_array.h — réseau de télémètres ToF VL53L1X, 5 directions
+ * (avant/arrière/haut/gauche/droite).
  *
  * Tous les VL53L1X démarrent à la même adresse I2C par défaut (0x29). La
  * technique standard pour en mettre plusieurs sur un bus : maintenir tous
@@ -26,10 +25,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TOF_NUM_SENSORS 4
+#define TOF_NUM_SENSORS 5
 #define TOF_DEFAULT_I2C_ADDR 0x29U
 
-typedef enum { TOF_FRONT = 0, TOF_UP = 1, TOF_LEFT = 2, TOF_RIGHT = 3 } tof_position_t;
+typedef enum { TOF_FRONT = 0, TOF_BACK = 1, TOF_UP = 2, TOF_LEFT = 3, TOF_RIGHT = 4 } tof_position_t;
 
 typedef struct {
     tof_position_t position;

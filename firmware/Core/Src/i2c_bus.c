@@ -28,9 +28,18 @@ void i2c1_init(void) {
 
     /* APB1 = 42 MHz (voir clock.c) */
     I2C1->CR2 = 42U;
-    /* 400 kHz mode rapide, duty 16/9 : formule standard RM0090 §27.6.8 */
-    I2C1->CCR = I2C_CCR_FS | I2C_CCR_DUTY | (35U & I2C_CCR_CCR_Msk);
-    I2C1->TRISE = 13U;
+    /* 100 kHz (mode standard, pas fast mode). Le bus dessert 5 capteurs
+     * ToF déportés sur des câbles vers des cartes filles en périphérie
+     * (voir docs/pcb.md) plutôt que des composants soudés au plus près
+     * du MCU. Le mode rapide (400 kHz) a un budget de capacité de bus
+     * serré (400 pF max, spec I2C) que ces longueurs de câble
+     * consommeraient vite ; le mode standard a une marge nettement plus
+     * confortable (1000 pF max) pour ce genre de câblage distribué —
+     * priorité donnée à la fiabilité plutôt qu'au débit, qui n'est de
+     * toute façon pas le facteur limitant ici (quelques lectures de
+     * distance par cycle de contrôle, pas un flux de données). */
+    I2C1->CCR = (210U & I2C_CCR_CCR_Msk);
+    I2C1->TRISE = 43U;
 
     I2C1->CR1 |= I2C_CR1_PE;
 }

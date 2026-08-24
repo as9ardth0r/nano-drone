@@ -6,32 +6,31 @@
 #include "tof_array.h"
 #include "motors_pwm.h"
 #include "avoidance.h"
+#include "uart3.h"
+#include "command_link.h"
 
 #define SAFETY_MARGIN_M 0.5f
 #define AVOIDANCE_GAIN  1.5f
 #define MAX_SPEED_MPS   3.0f
+#define CONTROL_PERIOD_S 0.02f /* boucle ~50 Hz */
 
-/* Câblage XSHUT retenu — voir docs/hardware.md pour le plan complet et
- * la justification du choix à 4 capteurs (avant/haut/gauche/droite,
- * pas d'arrière : compromis broches GPIO disponibles / poids câblage). */
+/* Câblage XSHUT retenu — 5 directions, voir docs/hardware.md pour le
+ * plan de brochage complet (PA0-PA4, aucun conflit avec I2C1/PWM/UART). */
 static tof_sensor_t tof_sensors[TOF_NUM_SENSORS] = {
     {TOF_FRONT, GPIO_PIN('A', 0), 0x30},
-    {TOF_UP,    GPIO_PIN('A', 1), 0x31},
-    {TOF_LEFT,  GPIO_PIN('A', 2), 0x32},
-    {TOF_RIGHT, GPIO_PIN('A', 3), 0x33},
+    {TOF_BACK,  GPIO_PIN('A', 4), 0x31},
+    {TOF_UP,    GPIO_PIN('A', 1), 0x32},
+    {TOF_LEFT,  GPIO_PIN('A', 2), 0x33},
+    {TOF_RIGHT, GPIO_PIN('A', 3), 0x34},
 };
 
-/* Convertit les 4 lectures ToF (avant/haut/gauche/droite) vers le
- * tableau à 5 capteurs attendu par avoidance.c (ND_SENSOR_*) ; "arrière"
- * n'existe pas sur cette configuration matérielle -> hors-portée fixe
- * (aucune répulsion générée depuis cette direction). */
 static void map_tof_to_avoidance_distances(const uint16_t tof_mm[TOF_NUM_SENSORS],
                                             float out[ND_NUM_SENSORS]) {
     out[ND_SENSOR_FRONT] = (float)tof_mm[TOF_FRONT] / 1000.0f;
+    out[ND_SENSOR_BACK]  = (float)tof_mm[TOF_BACK] / 1000.0f;
     out[ND_SENSOR_UP]    = (float)tof_mm[TOF_UP] / 1000.0f;
     out[ND_SENSOR_LEFT]  = (float)tof_mm[TOF_LEFT] / 1000.0f;
     out[ND_SENSOR_RIGHT] = (float)tof_mm[TOF_RIGHT] / 1000.0f;
-    out[ND_SENSOR_BACK]  = 999.0f; /* pas de capteur arrière sur cette config */
 }
 
 /* Mixer minimal : applique la même poussée de base aux 4 moteurs, puis
@@ -68,16 +67,33 @@ int main(void) {
     clock_init_168mhz_hse8mhz();
     i2c1_init();
     motors_pwm_init();
+    uart3_init(9600); /* baud par défaut du module HM-10 */
 
     bool imu_ok = mpu6050_init();
     bool tof_ok = tof_array_init(tof_sensors);
     (void)imu_ok; /* TODO: remonter un état de santé capteurs (LED, log) plutôt
                     * que d'ignorer silencieusement un échec d'init */
 
-    nd_vec3_t desired_velocity = {1.0f, 0.0f, 0.0f}; /* consigne de test : avance */
+    cl_link_state_t ble_link;
+    cl_link_init(&ble_link, CL_FAILSAFE_TIMEOUT_S);
+
     float distances[ND_NUM_SENSORS];
+    float t_s = 0.0f;
 
     while (1) {
+        /* commande smartphone : non bloquant, met à jour ble_link dès
+         * qu'une trame complète et valide arrive */
+        char line[64];
+        if (uart3_poll_line(line, sizeof(line))) {
+            cl_on_line_received(&ble_link, line, t_s);
+        }
+        cl_command_t desired_mm_s = cl_get_desired_velocity(&ble_link, t_s);
+        nd_vec3_t desired_velocity = {
+            (float)desired_mm_s.vx_mm_s / 1000.0f,
+            (float)desired_mm_s.vy_mm_s / 1000.0f,
+            (float)desired_mm_s.vz_mm_s / 1000.0f,
+        };
+
         uint16_t tof_mm[TOF_NUM_SENSORS];
         bool read_ok = tof_ok && tof_array_read(tof_sensors, tof_mm);
 
@@ -96,7 +112,8 @@ int main(void) {
                                              SAFETY_MARGIN_M, AVOIDANCE_GAIN, MAX_SPEED_MPS);
         mix_and_apply(cmd, 500);
 
-        gpio_delay_ms(20); /* boucle ~50 Hz — à remplacer par un timer cadencé
-                             * pour un temps de cycle garanti */
+        gpio_delay_ms(20); /* ~50 Hz — à remplacer par un timer cadencé pour
+                             * un temps de cycle garanti */
+        t_s += CONTROL_PERIOD_S;
     }
 }

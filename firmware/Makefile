@@ -16,6 +16,8 @@ C_SOURCES = \
 	Core/Src/tof_array.c \
 	Core/Src/motors_pwm.c \
 	Core/Src/avoidance.c \
+	Core/Src/command_link.c \
+	Core/Src/uart3.c \
 	Core/Src/system_stm32f4xx.c
 
 ASM_SOURCES = startup/startup_stm32f405xx.s
